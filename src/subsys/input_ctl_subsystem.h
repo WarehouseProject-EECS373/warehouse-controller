@@ -21,4 +21,12 @@ extern void ITCTL_Init();
  */
 extern void InputEventHandler(Message_t*);
 
+typedef struct Package_s
+{
+    uint8_t occupied;
+    uint8_t aisle_id;
+    uint8_t bay_id;
+
+} Package_t;
+
 #endif

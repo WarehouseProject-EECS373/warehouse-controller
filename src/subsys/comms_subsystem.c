@@ -27,7 +27,7 @@ STCPEngine_t stcp_engine;
 // the very beginning by sending some message
 // instead of hardcoding it in source.
 
-UART_HandleTypeDef uart_handle;
+UART_HandleTypeDef uart_zigby_handle;
 
 static volatile uint8_t rx_buffer[UART_RX_BUFFER_SIZE];
 static volatile uint32_t rx_buffer_count = 0;
@@ -42,7 +42,7 @@ __attribute__((__interrupt__)) extern void USART6_IRQHandler()
     OS_ISR_ENTER();
 
     // if RX buffer Not Empty (RXNE)
-    if(__HAL_UART_GET_IT_SOURCE(&uart_handle, UART_IT_RXNE) != RESET)
+    if(__HAL_UART_GET_IT_SOURCE(&uart_zigby_handle, UART_IT_RXNE) != RESET)
     {
         // add byte in UART data register to rx buffer
         rx_buffer[rx_buffer_count++] = (uint8_t)(USART6->DR & 0xFF);
@@ -91,6 +91,7 @@ extern void Comms_Init()
     UNUSED(SendMessage);
     UNUSED(UnpackMessage);
 
+    //UART zigby Init
     GPIO_InitTypeDef gpio_cfg;
 
     gpio_cfg.Pin = GPIO_PIN_11 | GPIO_PIN_12;
@@ -101,20 +102,20 @@ extern void Comms_Init()
 
     HAL_GPIO_Init(GPIOA, &gpio_cfg);
 
-    uart_handle.Instance = USART6;
-    uart_handle.Init.BaudRate = 115200;
-    uart_handle.Init.Mode = UART_MODE_TX_RX;
-    uart_handle.Init.WordLength = UART_WORDLENGTH_8B;
-    uart_handle.Init.StopBits = UART_STOPBITS_1;
-    uart_handle.Init.Parity = UART_PARITY_NONE;
-    uart_handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    uart_zigby_handle.Instance = USART6;
+    uart_zigby_handle.Init.BaudRate = 115200;
+    uart_zigby_handle.Init.Mode = UART_MODE_TX_RX;
+    uart_zigby_handle.Init.WordLength = UART_WORDLENGTH_8B;
+    uart_zigby_handle.Init.StopBits = UART_STOPBITS_1;
+    uart_zigby_handle.Init.Parity = UART_PARITY_NONE;
+    uart_zigby_handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
 
-    HAL_UART_Init(&uart_handle);
+    HAL_UART_Init(&uart_zigby_handle);
 
     HAL_NVIC_SetPriority(USART6_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(USART6_IRQn);
+    __HAL_UART_ENABLE_IT(&uart_zigby_handle, UART_IT_RXNE);
 
-    __HAL_UART_ENABLE_IT(&uart_handle, UART_IT_RXNE);
 }
 
 extern void CommsEventHandler(Message_t* msg)
@@ -144,7 +145,7 @@ static void ProcessLargeMessage(UartLargePacketMessage_t* msg)
 static STCPStatus_t SendMessage(void* buffer, uint16_t length, void* instance_data)
 {
     UNUSED(instance_data);
-    HAL_UART_Transmit(&uart_handle, (uint8_t*)buffer, length, UART_TX_TIMEOUT);
+    HAL_UART_Transmit(&uart_zigby_handle, (uint8_t*)buffer, length, UART_TX_TIMEOUT);
 
     return STCP_STATUS_SUCCESS;
 }

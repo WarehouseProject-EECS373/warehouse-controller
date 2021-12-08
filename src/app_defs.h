@@ -23,12 +23,13 @@ typedef struct UartLargePacketMessage_s
     uint16_t length;
     uint16_t mem_key;
 } UartLargePacketMessage_t;
-
 typedef struct DispatchMessage_s
+
 {
     Message_t base;
-    uint8_t bay_id;
-    uint8_t aisle_id;
+    uint8_t   bay_id;
+    uint8_t   aisle_id;
+    uint8_t   is_pickup;
 } DispatchMessage_t;
 
 typedef struct PropertyGetSetMessage_s
@@ -44,6 +45,9 @@ typedef struct PropertyGetSetMessage_s
 
 // system
 #define HEARTBEAT_MSG_ID   0x2
+
+#define PROCESS_QR_BUFFER_MSG_ID 0x30
+#define QR_READ_ERROR_MSG_ID     0x31
 
 #define PUSH_BUTTON_PRESSED_MSG_ID          0x61
 
