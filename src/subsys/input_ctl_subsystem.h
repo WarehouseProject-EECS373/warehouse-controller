@@ -29,4 +29,11 @@ typedef struct Package_s
 
 } Package_t;
 
+typedef struct QR_s
+{
+    uint8_t qr;
+    uint8_t state;
+
+} QR_t;
+
 #endif

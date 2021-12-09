@@ -31,15 +31,16 @@
 #define LED_READ_ERROR_PIN GPIO_PIN_15
 #define READ_ERROR_INDICATOR_PERIOD 2000
 
-#define NUM_BAYS 6
+#define NUM_BAYS 5
 #define NUM_AISLES 2
 #define BAYS_IN_AISLE_1 2
-#define BAYS_IN_AISLE_2 4
+#define BAYS_IN_AISLE_2 3
 
 static TimedEventSimple_t read_error_periodic_event;
 static Message_t          read_error_periodic_msg = {.id = QR_READ_ERROR_MSG_ID,
                                                       .msg_size = sizeof(Message_t)};
 
+static uint8_t ready_to_dispatch = 1;
 static uint8_t controller_state = DEPOSIT;
 
 static volatile uint8_t rx_buffer[UART_RX_BUFFER_SIZE];
@@ -48,15 +49,41 @@ static volatile uint32_t rx_buffer_count = 0;
 static uint32_t qr_count = 0;
 static uint8_t qr_input[UART_RX_BUFFER_SIZE];
 
+/*
+static QR_t QR_code_queue[30];
+static uint8_t QR_size = 0;
+static void QR_push(uint8_t code)
+{
+    QR_code_queue[QR_size].qr = code;
+    QR_code_queue[QR_size].state = controller_state;
+    ++QR_size;
+}
+static void QR_pop_and_dispatch(uint8_t code)
+{
+    //do something with front;
+    ++QR_size;
+}
+*/
+
 UART_HandleTypeDef uart_qr_handle;
 
 static Package_t Bay_Array[NUM_BAYS];
-static uint8_t QR_Array[NUM_BAYS];
+static uint8_t QR_Array[10] = {99,99,99,99,99,99,99,99,99,99};
+static uint8_t bays_occupied = 0;
 
 static uint8_t get_dispatch_bay(uint8_t code);
 static uint8_t get_fetch_bay(uint8_t code);
 static void dispatch_fetch();
 static uint8_t check_reading();
+static void error();
+
+static void error()
+{
+    HAL_GPIO_WritePin(LED_PORT, LED_READ_ERROR_PIN, GPIO_PIN_SET);
+    TimedEventSimpleCreate(&read_error_periodic_event, &input_ctl_ss_ao, &read_error_periodic_msg,
+                                            READ_ERROR_INDICATOR_PERIOD, TIMED_EVENT_SINGLE_TYPE);
+    SchedulerAddTimedEvent(&read_error_periodic_event);
+}
 
 static uint8_t check_reading()
 {
@@ -85,13 +112,15 @@ static uint8_t check_reading()
             }
         }
     }
+
+    if ((bays_occupied == NUM_BAYS && controller_state == DEPOSIT) || (bays_occupied == 0 && controller_state == FETCH))
+    {
+        flag = 1;
+    }
     
     if (flag)
     {
-        HAL_GPIO_WritePin(LED_PORT, LED_READ_ERROR_PIN, GPIO_PIN_SET);
-        TimedEventSimpleCreate(&read_error_periodic_event, &input_ctl_ss_ao, &read_error_periodic_msg,
-                                                READ_ERROR_INDICATOR_PERIOD, TIMED_EVENT_SINGLE_TYPE);
-        SchedulerAddTimedEvent(&read_error_periodic_event);
+        error();
         return 0;
     }
     else
@@ -112,21 +141,14 @@ static void dispatch_fetch()
     if (DEPOSIT == controller_state)
     {
         //TODO: change to dispatch deposit msg
-        uint8_t bay = get_dispatch_bay(qr_code);
-        UartSmallPacketMessage_t dmsg;
-        dmsg.base.id = UART_SMALL_PACKET_MSG_ID;
-        dmsg.base.msg_size = sizeof(UartSmallPacketMessage_t);
-        dmsg.length = 4;
-        dmsg.payload[0] = MSG_DISPATCH_ID;
-        dmsg.payload[1] = Bay_Array[bay].aisle_id;
-        dmsg.payload[2] = Bay_Array[bay].bay_id;
-        dmsg.payload[3] = 1;
-        MsgQueuePut(&comms_ss_ao, &dmsg);
-    }
-    else
-    {
-        //TODO: change to dispatch fetch msg
-        uint8_t bay = get_fetch_bay(qr_code);
+        
+        //uint8_t bay = get_dispatch_bay(qr_code);
+        uint8_t bay = qr_code - 1;
+        if (bay == 99)
+        {
+            error();
+            return;
+        }
         UartSmallPacketMessage_t dmsg;
         dmsg.base.id = UART_SMALL_PACKET_MSG_ID;
         dmsg.base.msg_size = sizeof(UartSmallPacketMessage_t);
@@ -135,15 +157,56 @@ static void dispatch_fetch()
         dmsg.payload[1] = Bay_Array[bay].aisle_id;
         dmsg.payload[2] = Bay_Array[bay].bay_id;
         dmsg.payload[3] = 0;
-        MsgQueuePut(&comms_ss_ao, &dmsg);
+        if (ready_to_dispatch)
+        {
+            //ready_to_dispatch = 0;
+            MsgQueuePut(&comms_ss_ao, &dmsg);
+        }
+        else
+        {
+            ;//add deposit message to queue
+        }
+    }
+    else
+    {
+        uint8_t bay = qr_code - 1;
+        //uint8_t bay = get_fetch_bay(qr_code);
+        if (bay == 99)
+        {
+            error();
+            return;
+        }
+        UartSmallPacketMessage_t dmsg;
+        dmsg.base.id = UART_SMALL_PACKET_MSG_ID;
+        dmsg.base.msg_size = sizeof(UartSmallPacketMessage_t);
+        dmsg.length = 4;
+        dmsg.payload[0] = MSG_DISPATCH_ID;
+        dmsg.payload[1] = Bay_Array[bay].aisle_id;
+        dmsg.payload[2] = Bay_Array[bay].bay_id;
+        dmsg.payload[3] = 1;
+        if (ready_to_dispatch)
+        {
+            //ready_to_dispatch = 0;
+            MsgQueuePut(&comms_ss_ao, &dmsg);
+        }
+        else
+        {
+            ;//add fetch msg to queue
+        }
+
     }
 
 }
 
 static uint8_t get_dispatch_bay(uint8_t code)
 {
+    if (QR_Array[code] != 99 && Bay_Array[QR_Array[code]].occupied)
+    {
+        return 99;
+    }
     uint8_t bay = 0;
-    
+    ++bays_occupied;
+
     while (Bay_Array[bay].occupied)
     {
         ++bay;
@@ -157,6 +220,11 @@ static uint8_t get_dispatch_bay(uint8_t code)
 
 static uint8_t get_fetch_bay(uint8_t code)
 {
+    if (QR_Array[code] != 99 && !Bay_Array[QR_Array[code]].occupied)
+    {
+        return 99;
+    }
+    --bays_occupied;
     uint8_t bay_idx = QR_Array[code];
     Bay_Array[bay_idx].occupied = 0;
     return bay_idx;
@@ -179,8 +247,16 @@ static void Bay_Array_Init()
         {
             num_bays = BAYS_IN_AISLE_2;
         }
-        for (bay = 1; bay <= num_bays; ++bay)
+        for (uint8_t i = 0; i < num_bays; ++i)
         {
+            if (num_bays == BAYS_IN_AISLE_1)
+            {
+                bay = 1 + i*2;
+            }
+            else
+            {
+                bay = i*2;
+            }
             Package_t package = {.occupied = 0, .aisle_id = aisle, .bay_id = bay};
             Bay_Array[bay_array_idx] = package;
             ++bay_array_idx;
@@ -216,6 +292,7 @@ __attribute__((__interrupt__)) extern void EXTI15_10_IRQHandler(void)
                 HAL_GPIO_WritePin(LED_PORT, LED_DROPOFF_PIN, GPIO_PIN_SET);
                 HAL_GPIO_WritePin(LED_PORT, LED_PICKUP_PIN, GPIO_PIN_RESET);
             }
+
         }
 
         // must clear interrupt
@@ -269,10 +346,16 @@ extern void InputEventHandler(Message_t* msg)
     {
         HAL_GPIO_WritePin(LED_PORT, LED_READ_ERROR_PIN, GPIO_PIN_RESET);
     }
+    else if(msg->id == AISLES_FREE_MSG_ID)
+    {
+        ready_to_dispatch = 1;
+    }
 }
 
 extern void ITCTL_Init()
 {
+    UNUSED(get_fetch_bay);
+    UNUSED(get_dispatch_bay);
     // initialize blue user button interrupt
     GPIO_InitTypeDef gpio_cfg;
     gpio_cfg.Pin = USER_BUTTON_PIN;

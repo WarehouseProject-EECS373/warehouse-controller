@@ -46,8 +46,10 @@ typedef struct PropertyGetSetMessage_s
 // system
 #define HEARTBEAT_MSG_ID   0x2
 
-#define PROCESS_QR_BUFFER_MSG_ID 0x30
+#define PROCESS_QR_BUFFER_MSG_ID 0x34
 #define QR_READ_ERROR_MSG_ID     0x31
+#define AISLES_FREE_MSG_ID       0x32
+#define ZUMO_BAY_EXIT_MSG_ID     0x30
 
 #define PUSH_BUTTON_PRESSED_MSG_ID          0x61
 

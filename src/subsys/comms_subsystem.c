@@ -16,6 +16,9 @@
 
 #define UART_RX_BUFFER_SIZE 32
 
+#define MESSAGE_ID_IDX 0
+#define EXPECTED_BAY_EXIT_MSG_LENGTH 0
+
 #define EXPECTED_GET_P_LENGTH       3
 #define EXPECTED_SET_P_LENGTH       7
 
@@ -74,8 +77,16 @@ static STCPStatus_t UnpackMessage(void* buffer, uint16_t length, void* instance_
 {
     uint8_t *payload = (uint8_t*)buffer;
     UNUSED(instance_data);
-    UNUSED(payload);
-    UNUSED(length);
+    if (ZUMO_BAY_EXIT_MSG_ID == payload[MESSAGE_ID_IDX])
+    {
+        if (EXPECTED_BAY_EXIT_MSG_LENGTH != length)
+        {
+            return STCP_STATUS_UNDEFINED_ERROR;
+        }
+        Message_t af_msg = {.id = AISLES_FREE_MSG_ID, .msg_size = sizeof(Message_t)};
+        MsgQueuePut(&input_ctl_ss_ao, &af_msg);
+
+    }
 
     return STCP_STATUS_SUCCESS;
 }
